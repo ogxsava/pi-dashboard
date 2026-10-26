@@ -76,13 +76,19 @@ def latency_ms(samples=5):
     return round(statistics.median(times), 1)
 
 
-def download_mbps():
-    """Download the test file and return the speed in megabits per second."""
+def download_mbps(max_seconds=15):
+    """Download the test file and return the speed in megabits per second.
+    On a very slow connection it stops after max_seconds and uses what was received so far."""
     start = time.perf_counter()
     request = urllib.request.Request(DOWNLOAD_URL, headers={"User-Agent": "pi-dashboard/1.0"})  # server rejects the default one
-    with urllib.request.urlopen(request, timeout=30) as response:
-        size = len(response.read())
-    return round(size * 8 / 1e6 / (time.perf_counter() - start), 1)
+    received = 0
+    with urllib.request.urlopen(request, timeout=10) as response:
+        while time.perf_counter() - start < max_seconds:
+            chunk = response.read(65536)
+            if not chunk:
+                break
+            received += len(chunk)
+    return round(received * 8 / 1e6 / (time.perf_counter() - start), 1)
 
 
 def speed_test():

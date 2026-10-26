@@ -63,14 +63,20 @@ async function loadSpeed() {
 document.getElementById("run").onclick = async (e) => {
   const btn = e.target, msg = document.getElementById("msg");
   btn.disabled = true; msg.textContent = "testing…";
-  const r = await fetch("/api/speedtests/run", { method: "POST" });
-  msg.textContent = r.ok ? "done" : "a test is already running";
-  btn.disabled = false; loadSpeed();
+  try {
+    const r = await fetch("/api/speedtests/run", { method: "POST" });
+    msg.textContent = r.ok ? "done" : r.status === 409 ? "a test is already running" : "test failed (server error)";
+  } catch (err) {
+    msg.textContent = "cannot reach the server";   // e.g. the dashboard was stopped
+  } finally {
+    btn.disabled = false;
+  }
+  loadSpeed().catch(() => {});
 };
 
 loadStatus(); loadSpeed();
-setInterval(loadStatus, 5000);
-setInterval(loadSpeed, 60000);
+setInterval(() => loadStatus().catch(() => {}), 5000);
+setInterval(() => loadSpeed().catch(() => {}), 60000);
 </script>
 </body>
 </html>
