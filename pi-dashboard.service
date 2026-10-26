@@ -1,0 +1,13 @@
+[Unit]
+Description=Pi status and internet speed dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/pi-dashboard
+ExecStart=/home/pi/dashboard-venv/bin/python app.py --port 8000 --interval 30
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

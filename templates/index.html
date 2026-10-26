@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pi Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root { --bg: #f5f6f8; --card: #fff; --text: #1d2330; --muted: #667085; --accent: #c51a4a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14171f; --card: #1f2430; --text: #e8eaf0; --muted: #98a2b3; --accent: #ff5c85; }
+  }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; }
+  h1 { font-size: 1.3rem; margin: 0 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .card { background: var(--card); border-radius: 10px; padding: 14px; }
+  .label { color: var(--muted); font-size: .8rem; }
+  .value { font-size: 1.4rem; font-weight: 600; margin-top: 4px; }
+  .chart { background: var(--card); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 10px 16px; font-size: .95rem; cursor: pointer; }
+  button:disabled { opacity: .6; cursor: wait; }
+  #msg { margin-left: 10px; color: var(--muted); font-size: .85rem; }
+</style>
+</head>
+<body>
+<h1 id="title">Pi Dashboard</h1>
+<div class="grid" id="stats"></div>
+<div class="chart"><canvas id="speedChart" height="120"></canvas></div>
+<button id="run">Run speed test now</button><span id="msg"></span>
+
+<script>
+const fmtUptime = s => s == null ? "n/a" : `${Math.floor(s/3600)} h ${Math.floor(s%3600/60)} min`;
+const card = (label, value) => `<div class="card"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+
+async function loadStatus() {
+  const s = await (await fetch("/api/status")).json();
+  document.getElementById("title").textContent = `${s.hostname} dashboard`;
+  document.getElementById("stats").innerHTML =
+    card("CPU temperature", s.cpu_temp_c == null ? "n/a" : `${s.cpu_temp_c} °C`) +
+    card("Load (1 / 5 / 15 min)", s.load ? s.load.join(" / ") : "n/a") +
+    card("Memory", s.memory ? `${s.memory.used_mb} / ${s.memory.total_mb} MB` : "n/a") +
+    card("Disk", `${s.disk.used_gb} / ${s.disk.total_gb} GB`) +
+    card("Uptime", fmtUptime(s.uptime_s));
+}
+
+const chart = new Chart(document.getElementById("speedChart"), {
+  type: "line",
+  data: { labels: [], datasets: [
+    { label: "Download (Mbit/s)", data: [], borderColor: "#c51a4a", yAxisID: "y", tension: .25 },
+    { label: "Latency (ms)", data: [], borderColor: "#2b7de9", yAxisID: "y1", tension: .25 } ] },
+  options: { scales: { y: { position: "left", title: { display: true, text: "Mbit/s" } },
+                       y1: { position: "right", grid: { drawOnChartArea: false }, title: { display: true, text: "ms" } } } }
+});
+
+async function loadSpeed() {
+  const rows = await (await fetch("/api/speedtests")).json();
+  chart.data.labels = rows.map(r => new Date(r.ts * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }));
+  chart.data.datasets[0].data = rows.map(r => r.download_mbps);
+  chart.data.datasets[1].data = rows.map(r => r.latency_ms);
+  chart.update();
+}
+
+document.getElementById("run").onclick = async (e) => {
+  const btn = e.target, msg = document.getElementById("msg");
+  btn.disabled = true; msg.textContent = "testing…";
+  const r = await fetch("/api/speedtests/run", { method: "POST" });
+  msg.textContent = r.ok ? "done" : "a test is already running";
+  btn.disabled = false; loadSpeed();
+};
+
+loadStatus(); loadSpeed();
+setInterval(loadStatus, 5000);
+setInterval(loadSpeed, 60000);
+</script>
+</body>
+</html>
